@@ -1,0 +1,118 @@
+long id; 
+long datamega;
+char data[20];
+float Lat = 0.000000;
+float Long = 0.000000;
+
+#include <SoftwareSerial.h>
+
+SoftwareSerial mySerial(D1, D2); // RX, TX
+
+void Line_Notify(String message) ;
+#include <ESP8266WiFi.h>
+
+//----------------------part2-----------------------------
+//แก้ไขในส่วนนี้
+// Config connect WiFi กำหนดชื่อและPasswordของWiFiที่จะเชื่อมต่อ
+#define WIFI_SSID "KB" // ชื่อWiFiที่กำหนดตั้งไว้
+#define WIFI_PASSWORD "10101010" // Passeordที่กำหนดตั้งไว้
+// Line config กำหนดบัญชีไลน์โดยการใส่ Token ที่ได้จากเว็บ LineNotify
+#define LINE_TOKEN "zRshYGmIm7uV7r4BISqNIYNqc9w6EZX19rSkL9xvscR"
+
+//------------------------part2--------------------------
+void setup() {
+  Serial.begin(9600);
+  pinMode(D4, OUTPUT);
+  digitalWrite(D4, HIGH);
+  WiFi.mode(WIFI_STA);
+  // connect to wifi.
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("connecting");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+  Serial.print("connected: ");
+  digitalWrite(D4, LOW);
+  Serial.println(WiFi.localIP());
+  mySerial.begin(9600);
+}
+//-----------------part3---------------------
+void loop() {
+  if ( mySerial.available())
+  {
+    String getdata = mySerial.readString();
+    getdata.toCharArray(data, 20);
+    int n = sscanf(data, "%d=%d", &id, &datamega);
+    Serial.print(F("n="));
+    Serial.println(n);
+    Serial.print(F("id="));
+    Serial.print(id);
+    Serial.print(F(", datamega="));
+    Serial.println(datamega);
+
+    if ( id > 1 ) //ถ้าidมากกว่า1 เป็นการเอาค่าLatที่เก็บไว้ที่Megaมาส่งค่าไปยังไลน์
+    {
+      Lat = id / 1000000.000000; 
+    }
+    if ( datamega > 1 )//ถ้าidมากกว่า1 เป็นการเอาค่าLongที่เก็บไว้ที่Megaมาส่งค่าไปยังไลน์
+    {
+      Long = datamega / 1000000.000000;
+    }
+
+    if ( id == 0 && datamega == 0 ) // เก็บค่าการเช็คแบตเตอรี่แล้วไว้ในMegaดึงมาส่งค่าไปยังไลน์
+    {
+      Line_Notify("แบตเตอรี่ใกล้หมด");
+      delay(200);      
+
+    }
+    else
+    {
+      Serial.println("http://maps.google.com/maps?q=" + String(Lat, 6) + "," + String(Long, 6));
+      Line_Notify("http://maps.google.com/maps?q=" + String(Lat, 6) + "," + String(Long, 6));
+      delay(200);
+    }
+
+  }// end serial
+
+
+}// end loop
+//-----------------------------------------------------------------------------------------------------------
+
+
+void Line_Notify(String message) {
+  WiFiClientSecure client; // กรณีขึ้น Error ให้ลบ axTLS:: ข้างหน้าทิ้ง
+
+  if (!client.connect("notify-api.line.me", 443)) {
+    Serial.println("connection failed");
+    return;
+  }
+
+  String req = "";
+  req += "POST /api/notify HTTP/1.1\r\n";
+  req += "Host: notify-api.line.me\r\n";
+  req += "Authorization: Bearer " + String(LINE_TOKEN) + "\r\n";
+  req += "Cache-Control: no-cache\r\n";
+  req += "User-Agent: ESP8266\r\n";
+  req += "Connection: close\r\n";
+  req += "Content-Type: application/x-www-form-urlencoded\r\n";
+  req += "Content-Length: " + String(String("message=" + message).length()) + "\r\n";
+  req += "\r\n";
+  req += "message=" + message;
+  // Serial.println(req);
+  client.print(req);
+
+  delay(20);
+
+  // Serial.println("-------------");
+  while (client.connected()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") {
+      break;
+    }
+    //Serial.println(line);
+  }
+  // Serial.println("-------------");
+}
